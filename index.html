@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OnlineCalc</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true"></div>
+
+    <main class="app">
+      <section class="calc" aria-label="Калькулятор">
+        <header class="calc__header">
+          <div class="brand">
+            <div class="brand__dot" aria-hidden="true"></div>
+            <div class="brand__text">OnlineCalc</div>
+          </div>
+          <button id="btnClearAll" class="icon-btn" type="button" title="Сбросить всё">
+            <span class="icon">⌫</span>
+          </button>
+        </header>
+
+        <div class="display" role="group" aria-label="Экран калькулятора">
+          <div id="expression" class="display__expr" aria-live="polite"></div>
+          <div id="result" class="display__res" aria-live="polite"></div>
+          <div id="hint" class="display__hint" aria-live="polite"></div>
+        </div>
+
+        <div class="keys" role="group" aria-label="Кнопки">
+          <button class="key key--soft" data-action="clearEntry" type="button">CE</button>
+          <button class="key key--soft" data-action="backspace" type="button">⌫</button>
+          <button class="key key--soft" data-value="(" type="button">(</button>
+          <button class="key key--soft" data-value=")" type="button">)</button>
+
+          <button class="key" data-value="7" type="button">7</button>
+          <button class="key" data-value="8" type="button">8</button>
+          <button class="key" data-value="9" type="button">9</button>
+          <button class="key key--op" data-value="/" type="button">÷</button>
+
+          <button class="key" data-value="4" type="button">4</button>
+          <button class="key" data-value="5" type="button">5</button>
+          <button class="key" data-value="6" type="button">6</button>
+          <button class="key key--op" data-value="*" type="button">×</button>
+
+          <button class="key" data-value="1" type="button">1</button>
+          <button class="key" data-value="2" type="button">2</button>
+          <button class="key" data-value="3" type="button">3</button>
+          <button class="key key--op" data-value="-" type="button">−</button>
+
+          <button class="key key--wide" data-value="0" type="button">0</button>
+          <button class="key" data-value="." type="button">.</button>
+          <button class="key key--op" data-value="+" type="button">+</button>
+
+          <button class="key key--eq" data-action="equals" type="button">=</button>
+        </div>
+
+        <footer class="footer">
+          <div class="footer__tip">Клавиатура: Enter = "=", Backspace = удалить, Esc = очистить</div>
+        </footer>
+      </section>
+
+      <aside class="history" aria-label="История операций">
+        <header class="history__header">
+          <div class="history__title">История</div>
+          <div class="history__actions">
+            <button id="btnHistoryClear" class="chip" type="button">Очистить</button>
+          </div>
+        </header>
+        <div id="historyList" class="history__list" role="list"></div>
+      </aside>
+    </main>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
