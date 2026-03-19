@@ -141,6 +141,10 @@ function isBinaryOperatorChar(ch) {
   return ch === "+" || ch === "-" || ch === "*" || ch === "/";
 }
 
+const INCOMPLETE_TAIL_CHARS = new Set(["+", "-", "*", "/", "("]);
+const PREVIEW_TRIM_TAIL_CHARS = new Set(["+", "-", "*", "/", "(", "."]);
+const OP_OR_PAREN_BREAK_CHARS = new Set(["+", "-", "*", "/", "(", ")", " "]);
+
 function precedence(op) {
   if (op === "*" || op === "/") return 2;
   if (op === "+" || op === "-") return 1;
@@ -182,35 +186,40 @@ function shouldTreatAsUnary(ch, prevToken) {
   return false;
 }
 
+function pushUnaryOrBinaryOperator(tokens, ch) {
+  const prev = getPrevToken(tokens);
+  tokens.push(shouldTreatAsUnary(ch, prev) ? (ch === "-" ? "u-" : "u+") : ch);
+}
+
+function tokenizeStep(s, tokens, i) {
+  const ch = s[i];
+
+  if (isParenChar(ch)) {
+    tokens.push(ch);
+    return i + 1;
+  }
+
+  if (isBinaryOperatorChar(ch)) {
+    pushUnaryOrBinaryOperator(tokens, ch);
+    return i + 1;
+  }
+
+  if (isNumberChar(ch)) {
+    const { token, nextIndex } = readNumberToken(s, i);
+    tokens.push(token);
+    return nextIndex;
+  }
+
+  throw new Error("BAD_CHAR");
+}
+
 function tokenize(expr) {
   const s = expr.replace(/\s+/g, "");
   const tokens = [];
 
   let i = 0;
   while (i < s.length) {
-    const ch = s[i];
-
-    if (isParenChar(ch)) {
-      tokens.push(ch);
-      i += 1;
-      continue;
-    }
-
-    if (isBinaryOperatorChar(ch)) {
-      const prev = getPrevToken(tokens);
-      tokens.push(shouldTreatAsUnary(ch, prev) ? (ch === "-" ? "u-" : "u+") : ch);
-      i += 1;
-      continue;
-    }
-
-    if (isNumberChar(ch)) {
-      const { token, nextIndex } = readNumberToken(s, i);
-      tokens.push(token);
-      i = nextIndex;
-      continue;
-    }
-
-    throw new Error("BAD_CHAR");
+    i = tokenizeStep(s, tokens, i);
   }
 
   return tokens;
@@ -240,39 +249,40 @@ function toRpn(tokens) {
     pushOpToOutWhile((top) => isUnaryOperatorToken(top));
   };
 
-  for (const t of tokens) {
+  const handleToken = (t) => {
     if (typeof t === "object" && t.type === "number") {
       out.push(t);
-      continue;
+      return;
     }
 
     if (isUnaryOperatorToken(t)) {
       stack.push(t);
-      continue;
+      return;
     }
 
     if (isOperator(t)) {
       unwindForBinaryOperator(t);
       stack.push(t);
-      continue;
+      return;
     }
 
     if (t === "(") {
       stack.push(t);
-      continue;
+      return;
     }
 
     if (t === ")") {
       pushOpToOutWhile((top) => top !== "(");
       if (!stack.length) throw new Error("MISMATCH_PAREN");
       stack.pop();
-
       unwindUnaryAfterParen();
-      continue;
+      return;
     }
 
     throw new Error("BAD_TOKEN");
-  }
+  };
+
+  for (const t of tokens) handleToken(t);
 
   while (stack.length) {
     const top = stack.pop();
@@ -286,32 +296,57 @@ function toRpn(tokens) {
 function evalRpn(rpn) {
   const st = [];
 
-  for (const t of rpn) {
+  const popOne = () => {
+    const a = st.pop();
+    if (!a) throw new Error("BAD_EXPR");
+    return a;
+  };
+
+  const popTwo = () => {
+    const b = st.pop();
+    const a = st.pop();
+    if (!a || !b) throw new Error("BAD_EXPR");
+    return { a, b };
+  };
+
+  const applyBinaryOperator = (op) => {
+    const { a, b } = popTwo();
+    const ops = {
+      "+": add,
+      "-": sub,
+      "*": mul,
+      "/": div,
+    };
+    const fn = ops[op];
+    if (!fn) throw new Error("BAD_EXPR");
+    st.push(fn(a, b));
+  };
+
+  const applyUnaryOperator = (op) => {
+    const a = popOne();
+    st.push(op === "u-" ? normalize({ n: -a.n, d: a.d }) : a);
+  };
+
+  const handleRpnToken = (t) => {
     if (typeof t === "object" && t.type === "number") {
       st.push(parseNumberToRational(t.value));
-      continue;
+      return;
     }
 
-    if (t === "u-" || t === "u+") {
-      const a = st.pop();
-      if (!a) throw new Error("BAD_EXPR");
-      st.push(t === "u-" ? normalize({ n: -a.n, d: a.d }) : a);
-      continue;
+    if (isUnaryOperatorToken(t)) {
+      applyUnaryOperator(t);
+      return;
     }
 
     if (isOperator(t)) {
-      const b = st.pop();
-      const a = st.pop();
-      if (!a || !b) throw new Error("BAD_EXPR");
-      if (t === "+") st.push(add(a, b));
-      else if (t === "-") st.push(sub(a, b));
-      else if (t === "*") st.push(mul(a, b));
-      else if (t === "/") st.push(div(a, b));
-      continue;
+      applyBinaryOperator(t);
+      return;
     }
 
     throw new Error("BAD_EXPR");
-  }
+  };
+
+  for (const t of rpn) handleRpnToken(t);
 
   if (st.length !== 1) throw new Error("BAD_EXPR");
   return st[0];
@@ -327,7 +362,7 @@ function isExpressionIncomplete(expr) {
   const s = expr.replace(/\s+/g, "");
   if (!s) return true;
   const last = s[s.length - 1];
-  return last === "+" || last === "-" || last === "*" || last === "/" || last === "(";
+  return INCOMPLETE_TAIL_CHARS.has(last);
 }
 
 function countChar(str, ch) {
@@ -344,7 +379,7 @@ function getPreviewResultForIncompleteExpression(expr) {
   let s = expr.replace(/\s+/g, "");
   while (s) {
     const last = s[s.length - 1];
-    if (last === "+" || last === "-" || last === "*" || last === "/" || last === "(" || last === ".") {
+    if (PREVIEW_TRIM_TAIL_CHARS.has(last)) {
       s = s.slice(0, -1);
       continue;
     }
@@ -393,7 +428,7 @@ function canAppendDot() {
   while (i >= 0) {
     const ch = s[i];
     if (ch === ".") return false;
-    if (ch === "+" || ch === "-" || ch === "*" || ch === "/" || ch === "(" || ch === ")" || ch === " ") break;
+    if (OP_OR_PAREN_BREAK_CHARS.has(ch)) break;
     i -= 1;
   }
   return true;
@@ -621,34 +656,43 @@ function addHistoryItem({ expr, res, ts }) {
 function handleKey(e) {
   const k = e.key;
 
-  if (k === "Enter" || k === "=") {
+  const keyToAction = {
+    Enter: "equals",
+    "=": "equals",
+    Backspace: "backspace",
+    Escape: "clearAll",
+    ",": "dot",
+  };
+
+  const action = keyToAction[k];
+
+  if (action === "equals") {
     e.preventDefault();
     equals();
     return;
   }
 
-  if (k === "Backspace") {
+  if (action === "backspace") {
     e.preventDefault();
     backspace();
     return;
   }
 
-  if (k === "Escape") {
+  if (action === "clearAll") {
     e.preventDefault();
     clearAll();
     return;
   }
 
-  if (k === ",") {
+  if (action === "dot") {
     e.preventDefault();
     appendValue(".");
     return;
   }
 
-  if ((k >= "0" && k <= "9") || k === "." || k === "+" || k === "-" || k === "*" || k === "/" || k === "(" || k === ")") {
-    e.preventDefault();
-    appendValue(k);
-  }
+  if (!isDigitChar(k) && !isBinaryOperatorChar(k) && k !== "." && k !== "(" && k !== ")") return;
+  e.preventDefault();
+  appendValue(k);
 }
 
 function init() {
