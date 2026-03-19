@@ -121,10 +121,65 @@ function isOperator(t) {
   return t === "+" || t === "-" || t === "*" || t === "/";
 }
 
+function isUnaryOperatorToken(t) {
+  return t === "u-" || t === "u+";
+}
+
+function isDigitChar(ch) {
+  return ch >= "0" && ch <= "9";
+}
+
+function isNumberChar(ch) {
+  return ch === "." || isDigitChar(ch);
+}
+
+function isParenChar(ch) {
+  return ch === "(" || ch === ")";
+}
+
+function isBinaryOperatorChar(ch) {
+  return ch === "+" || ch === "-" || ch === "*" || ch === "/";
+}
+
 function precedence(op) {
   if (op === "*" || op === "/") return 2;
   if (op === "+" || op === "-") return 1;
   return 0;
+}
+
+function readNumberToken(s, startIndex) {
+  let j = startIndex;
+  let sawDot = false;
+
+  while (j < s.length) {
+    const cj = s[j];
+    if (cj === ".") {
+      if (sawDot) break;
+      sawDot = true;
+      j += 1;
+      continue;
+    }
+    if (isDigitChar(cj)) {
+      j += 1;
+      continue;
+    }
+    break;
+  }
+
+  const num = s.slice(startIndex, j);
+  if (num === ".") throw new Error("BAD_NUMBER");
+  return { token: { type: "number", value: num }, nextIndex: j };
+}
+
+function getPrevToken(tokens) {
+  return tokens.length ? tokens[tokens.length - 1] : null;
+}
+
+function shouldTreatAsUnary(ch, prevToken) {
+  if (ch !== "+" && ch !== "-") return false;
+  if (prevToken === null) return true;
+  if (typeof prevToken === "string" && (isOperator(prevToken) || prevToken === "(")) return true;
+  return false;
 }
 
 function tokenize(expr) {
@@ -135,49 +190,23 @@ function tokenize(expr) {
   while (i < s.length) {
     const ch = s[i];
 
-    if (ch === "(" || ch === ")") {
+    if (isParenChar(ch)) {
       tokens.push(ch);
       i += 1;
       continue;
     }
 
-    if (ch === "+" || ch === "-" || ch === "*" || ch === "/") {
-      const prev = tokens.length ? tokens[tokens.length - 1] : null;
-      const isUnary =
-        (ch === "+" || ch === "-") &&
-        (prev === null || (typeof prev === "string" && (isOperator(prev) || prev === "(")));
-
-      if (isUnary) {
-        tokens.push(ch === "-" ? "u-" : "u+");
-      } else {
-        tokens.push(ch);
-      }
-
+    if (isBinaryOperatorChar(ch)) {
+      const prev = getPrevToken(tokens);
+      tokens.push(shouldTreatAsUnary(ch, prev) ? (ch === "-" ? "u-" : "u+") : ch);
       i += 1;
       continue;
     }
 
-    if (ch === "." || (ch >= "0" && ch <= "9")) {
-      let j = i;
-      let sawDot = false;
-      while (j < s.length) {
-        const cj = s[j];
-        if (cj === ".") {
-          if (sawDot) break;
-          sawDot = true;
-          j += 1;
-          continue;
-        }
-        if (cj >= "0" && cj <= "9") {
-          j += 1;
-          continue;
-        }
-        break;
-      }
-      const num = s.slice(i, j);
-      if (num === ".") throw new Error("BAD_NUMBER");
-      tokens.push({ type: "number", value: num });
-      i = j;
+    if (isNumberChar(ch)) {
+      const { token, nextIndex } = readNumberToken(s, i);
+      tokens.push(token);
+      i = nextIndex;
       continue;
     }
 
@@ -191,29 +220,39 @@ function toRpn(tokens) {
   const out = [];
   const stack = [];
 
+  const pushOpToOutWhile = (predicate) => {
+    while (stack.length && predicate(stack[stack.length - 1])) {
+      out.push(stack.pop());
+    }
+  };
+
+  const unwindForBinaryOperator = (op) => {
+    pushOpToOutWhile((top) => {
+      const topIsOp = isOperator(top) || isUnaryOperatorToken(top);
+      if (!topIsOp) return false;
+      const pTop = isUnaryOperatorToken(top) ? 3 : precedence(top);
+      const pThis = precedence(op);
+      return pTop >= pThis;
+    });
+  };
+
+  const unwindUnaryAfterParen = () => {
+    pushOpToOutWhile((top) => isUnaryOperatorToken(top));
+  };
+
   for (const t of tokens) {
     if (typeof t === "object" && t.type === "number") {
       out.push(t);
       continue;
     }
 
-    if (t === "u-" || t === "u+") {
+    if (isUnaryOperatorToken(t)) {
       stack.push(t);
       continue;
     }
 
     if (isOperator(t)) {
-      while (stack.length) {
-        const top = stack[stack.length - 1];
-        const topIsOp = isOperator(top) || top === "u-" || top === "u+";
-        if (!topIsOp) break;
-
-        const pTop = top === "u-" || top === "u+" ? 3 : precedence(top);
-        const pThis = precedence(t);
-
-        if (pTop >= pThis) out.push(stack.pop());
-        else break;
-      }
+      unwindForBinaryOperator(t);
       stack.push(t);
       continue;
     }
@@ -224,15 +263,11 @@ function toRpn(tokens) {
     }
 
     if (t === ")") {
-      while (stack.length && stack[stack.length - 1] !== "(") {
-        out.push(stack.pop());
-      }
+      pushOpToOutWhile((top) => top !== "(");
       if (!stack.length) throw new Error("MISMATCH_PAREN");
       stack.pop();
 
-      while (stack.length && (stack[stack.length - 1] === "u-" || stack[stack.length - 1] === "u+")) {
-        out.push(stack.pop());
-      }
+      unwindUnaryAfterParen();
       continue;
     }
 
@@ -292,8 +327,7 @@ function isExpressionIncomplete(expr) {
   const s = expr.replace(/\s+/g, "");
   if (!s) return true;
   const last = s[s.length - 1];
-  if (last === "+" || last === "-" || last === "*" || last === "/" || last === "(") return true;
-  return false;
+  return last === "+" || last === "-" || last === "*" || last === "/" || last === "(";
 }
 
 function countChar(str, ch) {
@@ -365,38 +399,79 @@ function canAppendDot() {
   return true;
 }
 
+function isOperatorOrOpenParenAtEnd(expr) {
+  return /[+\-*/(]$/.test(expr.replace(/\s+/g, ""));
+}
+
+function replaceTrailingOperator(newOp) {
+  expression = expression.slice(0, -1) + newOp;
+}
+
+function tryAppendDot() {
+  if (!canAppendDot()) return true;
+  if (!expression || isOperatorOrOpenParenAtEnd(expression)) expression += "0";
+  expression += ".";
+  return true;
+}
+
+function tryAppendOpenParen() {
+  const s = expression.replace(/\s+/g, "");
+  if (s && /[0-9.)]$/.test(s)) expression += "*";
+  expression += "(";
+  return true;
+}
+
+function tryAppendCloseParen() {
+  const s = expression.replace(/\s+/g, "");
+  if (countChar(s, "(") <= countChar(s, ")")) return true;
+  if (s && isOperatorOrOpenParenAtEnd(expression)) return true;
+  expression += ")";
+  return true;
+}
+
+function tryAppendOperator(op) {
+  const s = expression.replace(/\s+/g, "");
+
+  if (!s) {
+    if (op === "-" || op === "+") {
+      expression = op;
+      return true;
+    }
+    return true;
+  }
+
+  if (/[+\-*/.]$/.test(s)) {
+    replaceTrailingOperator(op);
+    return true;
+  }
+
+  expression += op;
+  return true;
+}
+
 function appendValue(v) {
   if (v === ".") {
-    if (!canAppendDot()) return;
-    if (!expression || /[+\-*/(]$/.test(expression.replace(/\s+/g, ""))) expression += "0";
+    tryAppendDot();
+    render();
+    return;
   }
 
   if (v === "(") {
-    const s = expression.replace(/\s+/g, "");
-    if (s && /[0-9.)]$/.test(s)) expression += "*";
+    tryAppendOpenParen();
+    render();
+    return;
   }
 
   if (v === ")") {
-    const s = expression.replace(/\s+/g, "");
-    if (countChar(s, "(") <= countChar(s, ")")) return;
-    if (s && /[+\-*/(]$/.test(s)) return;
+    tryAppendCloseParen();
+    render();
+    return;
   }
 
-  if (v === "+" || v === "-" || v === "*" || v === "/") {
-    const s = expression.replace(/\s+/g, "");
-    if (!s) {
-      if (v === "-" || v === "+") {
-        expression = v;
-        render();
-      }
-      return;
-    }
-
-    if (/[+\-*/.]$/.test(s)) {
-      expression = expression.slice(0, -1) + v;
-      render();
-      return;
-    }
+  if (isBinaryOperatorChar(v)) {
+    tryAppendOperator(v);
+    render();
+    return;
   }
 
   expression += v;
