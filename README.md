@@ -1,3 +1,4 @@
+[![Maintainability](https://qlty.sh/gh/h1kix/projects/onlinecalc/maintainability.svg)](https://qlty.sh/gh/h1kix/projects/onlinecalc)
 # OnlineCalc
 
 Небольшой онлайн‑калькулятор на чистых `HTML + CSS + JS`.
