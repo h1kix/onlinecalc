@@ -230,26 +230,26 @@
       pushOpToOutWhile((top) => isUnaryOperatorToken(top));
     };
 
-    const handleToken = (t) => {
+    for (const t of tokens) {
       if (typeof t === "object" && t.type === "number") {
         out.push(t);
-        return;
+        continue;
       }
 
       if (isUnaryOperatorToken(t)) {
         stack.push(t);
-        return;
+        continue;
       }
 
       if (isOperator(t)) {
         unwindForBinaryOperator(t);
         stack.push(t);
-        return;
+        continue;
       }
 
       if (t === "(") {
         stack.push(t);
-        return;
+        continue;
       }
 
       if (t === ")") {
@@ -257,13 +257,11 @@
         if (!stack.length) throw new Error("MISMATCH_PAREN");
         stack.pop();
         unwindUnaryAfterParen();
-        return;
+        continue;
       }
 
       throw new Error("BAD_TOKEN");
-    };
-
-    for (const t of tokens) handleToken(t);
+    }
 
     while (stack.length) {
       const top = stack.pop();
@@ -308,26 +306,24 @@
       st.push(op === "u-" ? normalize({ n: -a.n, d: a.d }) : a);
     };
 
-    const handleRpnToken = (t) => {
+    for (const t of rpn) {
       if (typeof t === "object" && t.type === "number") {
         st.push(parseNumberToRational(t.value));
-        return;
+        continue;
       }
 
       if (isUnaryOperatorToken(t)) {
         applyUnaryOperator(t);
-        return;
+        continue;
       }
 
       if (isOperator(t)) {
         applyBinaryOperator(t);
-        return;
+        continue;
       }
 
       throw new Error("BAD_EXPR");
-    };
-
-    for (const t of rpn) handleRpnToken(t);
+    }
 
     if (st.length !== 1) throw new Error("BAD_EXPR");
     return st[0];

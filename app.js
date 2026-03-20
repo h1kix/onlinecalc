@@ -307,6 +307,10 @@ function addHistoryItem({ expr, res, ts }) {
   renderHistory();
 }
 
+function isAllowedInputKey(k) {
+  return isDigitChar(k) || isBinaryOperatorChar(k) || k === "." || k === "(" || k === ")";
+}
+
 function handleKey(e) {
   const k = e.key;
 
@@ -344,7 +348,7 @@ function handleKey(e) {
     return;
   }
 
-  if (!isDigitChar(k) && !isBinaryOperatorChar(k) && k !== "." && k !== "(" && k !== ")") return;
+  if (!isAllowedInputKey(k)) return;
   e.preventDefault();
   appendValue(k);
 }
