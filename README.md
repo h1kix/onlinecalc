@@ -1,6 +1,9 @@
 [![Maintainability](https://qlty.sh/gh/h1kix/projects/onlinecalc/maintainability.svg)](https://qlty.sh/gh/h1kix/projects/onlinecalc)
 # OnlineCalc
 
+Demo:
+![hippo](https://github.com/h1kix/onlinecalc/blob/main/demo/2026-03-20%2005-50-09.gif)
+
 Небольшой онлайн‑калькулятор на чистых `HTML + CSS + JS`.
 
 - Приоритет операций: `*` / `/` выше `+` / `-`
