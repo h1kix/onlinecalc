@@ -206,62 +206,64 @@
     return tokens;
   }
 
+  function pushOpToOutWhile(stack, out, predicate) {
+    while (stack.length && predicate(stack[stack.length - 1])) {
+      out.push(stack.pop());
+    }
+  }
+
+  function unwindForBinaryOperator(stack, out, op) {
+    pushOpToOutWhile(stack, out, (top) => {
+      const topIsOp = isOperator(top) || isUnaryOperatorToken(top);
+      if (!topIsOp) return false;
+      const pTop = isUnaryOperatorToken(top) ? 3 : precedence(top);
+      const pThis = precedence(op);
+      return pTop >= pThis;
+    });
+  }
+
+  function unwindUnaryAfterParen(stack, out) {
+    pushOpToOutWhile(stack, out, (top) => isUnaryOperatorToken(top));
+  }
+
+  function toRpnHandleToken(stack, out, t) {
+    if (typeof t === "object" && t.type === "number") {
+      out.push(t);
+      return;
+    }
+
+    if (isUnaryOperatorToken(t)) {
+      stack.push(t);
+      return;
+    }
+
+    if (isOperator(t)) {
+      unwindForBinaryOperator(stack, out, t);
+      stack.push(t);
+      return;
+    }
+
+    if (t === "(") {
+      stack.push(t);
+      return;
+    }
+
+    if (t === ")") {
+      pushOpToOutWhile(stack, out, (top) => top !== "(");
+      if (!stack.length) throw new Error("MISMATCH_PAREN");
+      stack.pop();
+      unwindUnaryAfterParen(stack, out);
+      return;
+    }
+
+    throw new Error("BAD_TOKEN");
+  }
+
   function toRpn(tokens) {
     const out = [];
     const stack = [];
 
-    const pushOpToOutWhile = (predicate) => {
-      while (stack.length && predicate(stack[stack.length - 1])) {
-        out.push(stack.pop());
-      }
-    };
-
-    const unwindForBinaryOperator = (op) => {
-      pushOpToOutWhile((top) => {
-        const topIsOp = isOperator(top) || isUnaryOperatorToken(top);
-        if (!topIsOp) return false;
-        const pTop = isUnaryOperatorToken(top) ? 3 : precedence(top);
-        const pThis = precedence(op);
-        return pTop >= pThis;
-      });
-    };
-
-    const unwindUnaryAfterParen = () => {
-      pushOpToOutWhile((top) => isUnaryOperatorToken(top));
-    };
-
-    for (const t of tokens) {
-      if (typeof t === "object" && t.type === "number") {
-        out.push(t);
-        continue;
-      }
-
-      if (isUnaryOperatorToken(t)) {
-        stack.push(t);
-        continue;
-      }
-
-      if (isOperator(t)) {
-        unwindForBinaryOperator(t);
-        stack.push(t);
-        continue;
-      }
-
-      if (t === "(") {
-        stack.push(t);
-        continue;
-      }
-
-      if (t === ")") {
-        pushOpToOutWhile((top) => top !== "(");
-        if (!stack.length) throw new Error("MISMATCH_PAREN");
-        stack.pop();
-        unwindUnaryAfterParen();
-        continue;
-      }
-
-      throw new Error("BAD_TOKEN");
-    }
+    for (const t of tokens) toRpnHandleToken(stack, out, t);
 
     while (stack.length) {
       const top = stack.pop();
